@@ -81,7 +81,7 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
   rtc.RTCVideoRenderer? _renderer;
   bool _ownsRenderer = false;
   bool _disposed = false;
-  bool _trackMuted = false;
+
   int _generation = 0;
   Future<void>? _initializing;
   Future<rtc.RTCVideoRenderer?>? _rendererFuture;
@@ -162,7 +162,6 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
   @override
   void initState() {
     super.initState();
-    _trackMuted = widget.track.muted;
     _viewRegistration = widget.track.addViewRegistration(
       pixelDensity: widget.adaptiveStreamPixelDensity,
     );
@@ -181,24 +180,6 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
     super.dispose();
   }
 
-  void _setTrackMuted(rtc.RTCVideoRenderer renderer, bool muted) {
-    _trackMuted = muted;
-    _setVideoElementVisible(renderer, !muted);
-  }
-
-  void _setVideoElementVisible(rtc.RTCVideoRenderer renderer, bool visible) {
-    // Keep both the HTML element and its MediaStream attached. Detaching
-    // srcObject makes Safari reconfigure video compositing for all tiles.
-    // CSS visibility hides only this element while preserving its layout,
-    // decoder, and the other participants' video surfaces.
-    (renderer as dynamic).findHtmlView()?.style.visibility = visible ? 'visible' : 'hidden';
-  }
-
-  void _applyVideoElementVisibility() {
-    final renderer = _renderer;
-    if (renderer != null) _setVideoElementVisible(renderer, !_trackMuted);
-  }
-
   Future<void> _attach(int generation, rtc.RTCVideoRenderer renderer) async {
     final oldListener = _listener;
     _listener = null;
@@ -208,9 +189,9 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
     }
 
     final track = widget.track;
-    _trackMuted = track.muted;
-    renderer.srcObject = track.mediaStream;
-    _setVideoElementVisible(renderer, !_trackMuted);
+    if (!identical(renderer.srcObject, track.mediaStream)) {
+      renderer.srcObject = track.mediaStream;
+    }
 
     _listener = track.createListener()
       ..on<TrackStreamUpdatedEvent>((event) {
@@ -218,17 +199,9 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
           return;
         }
 
-        // Keep the media stream attached even while hidden. Safari retains
-        // stable composition for the other HtmlElementView video tiles this
-        // way, and the element becomes visible immediately on unmute.
-        renderer.srcObject = event.stream;
-        _setVideoElementVisible(renderer, !_trackMuted);
-      })
-      ..on<InternalTrackMuteUpdatedEvent>((event) {
-        if (_disposed || generation != _generation || !identical(renderer, _renderer)) {
-          return;
+        if (!identical(renderer.srcObject, event.stream)) {
+          renderer.srcObject = event.stream;
         }
-        _setTrackMuted(renderer, event.muted);
       })
       ..on<LocalTrackOptionsUpdatedEvent>((event) {
         if (_disposed || generation != _generation || !mounted) return;
@@ -268,7 +241,6 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
     if (trackChanged) {
       oldWidget.track.removeViewRegistration(_viewRegistration);
       widget.track.addExistingViewRegistration(_viewRegistration);
-      _trackMuted = widget.track.muted;
     } else if (widget.adaptiveStreamPixelDensity != oldWidget.adaptiveStreamPixelDensity) {
       _viewRegistration.pixelDensity = widget.adaptiveStreamPixelDensity;
     }
@@ -286,7 +258,6 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
             key: _viewRegistration.key,
             builder: (context) {
               WidgetsBindingCompatible.instance?.addPostFrameCallback((_) {
-                _applyVideoElementVisibility();
                 widget.track.onVideoViewBuild?.call();
               });
               return rtc.RTCVideoView(

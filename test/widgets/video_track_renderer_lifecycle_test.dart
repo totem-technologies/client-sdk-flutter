@@ -38,6 +38,7 @@ class _Renderer extends rtc.RTCVideoRenderer {
   rtc.MediaStream? _stream;
   int initializationCount = 0;
   int disposeCount = 0;
+  int srcObjectUpdateCount = 0;
 
   @override
   Future<void> initialize() {
@@ -49,7 +50,10 @@ class _Renderer extends rtc.RTCVideoRenderer {
   rtc.MediaStream? get srcObject => _stream;
 
   @override
-  set srcObject(rtc.MediaStream? value) => _stream = value;
+  set srcObject(rtc.MediaStream? value) {
+    srcObjectUpdateCount++;
+    _stream = value;
+  }
 
   @override
   Future<void> dispose() async {
@@ -158,6 +162,45 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   });
 
+  testWidgets('mute and unmute do not mutate the renderer source', (tester) async {
+    final track = _Track(_Stream());
+    renderer.initialized.complete();
+    await tester.pumpWidget(view(track));
+    await tester.runAsync(() async => await Future<void>.delayed(Duration.zero));
+    await tester.pumpAndSettle();
+    final sourceUpdateCount = renderer.srcObjectUpdateCount;
+
+    for (var i = 0; i < 20; i++) {
+      track.updateMuted(i.isEven);
+    }
+    await tester.pump();
+
+    expect(renderer.initializationCount, 1);
+    expect(renderer.disposeCount, 0);
+    expect(renderer.srcObjectUpdateCount, sourceUpdateCount);
+    expect(find.byType(rtc.RTCVideoView), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 100));
+  });
+
+  testWidgets('same stream updates do not redundantly assign srcObject', (tester) async {
+    final track = _Track(_Stream());
+    renderer.initialized.complete();
+    await tester.pumpWidget(view(track));
+    await tester.runAsync(() async => await Future<void>.delayed(Duration.zero));
+    await tester.pumpAndSettle();
+    final sourceUpdateCount = renderer.srcObjectUpdateCount;
+    expect(identical(renderer.srcObject, track.stream), isTrue);
+
+    track.updateStream(track.stream);
+    await tester.pump();
+
+    expect(renderer.srcObjectUpdateCount, sourceUpdateCount);
+    expect(renderer.srcObject, same(track.stream));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 100));
+  });
+
   testWidgets('rapid replacement leaves only the latest listener and stream', (tester) async {
     final a = _Track(_Stream());
     final b = _Track(_Stream());
@@ -188,11 +231,13 @@ void main() {
     expect(find.byType(rtc.RTCVideoView), findsOneWidget);
     expect(renderer.srcObject, same(c.stream));
 
+    final sourceUpdateCount = renderer.srcObjectUpdateCount;
     final updated = _Stream();
     c.updateStream(updated);
     await tester.runAsync(() async => await Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
     expect(renderer.srcObject, same(updated));
+    expect(renderer.srcObjectUpdateCount, sourceUpdateCount + 1);
     await tester.pumpWidget(const SizedBox());
     expect(c.created.single.disposeCount, 1);
     await tester.pump(const Duration(milliseconds: 100));

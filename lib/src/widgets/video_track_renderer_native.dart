@@ -205,11 +205,11 @@ class _NativeVideoTrackRendererState extends State<_NativeVideoTrackRenderer> {
     await oldListener?.dispose();
     if (_disposed || generation != _generation || !identical(renderer, _renderer)) return;
     final track = widget.track;
-    renderer.srcObject = track.mediaStream;
+    if (!identical(renderer.srcObject, track.mediaStream)) renderer.srcObject = track.mediaStream;
     _listener = track.createListener()
       ..on<TrackStreamUpdatedEvent>((event) {
         if (_disposed || generation != _generation || !identical(renderer, _renderer)) return;
-        renderer.srcObject = event.stream;
+        if (!identical(renderer.srcObject, event.stream)) renderer.srcObject = event.stream;
       })
       ..on<LocalTrackOptionsUpdatedEvent>((event) {
         if (_disposed || generation != _generation || !mounted) return;
