@@ -23,7 +23,6 @@ import '../extensions.dart';
 import '../internal/events.dart';
 import '../logger.dart';
 import '../managers/event.dart';
-import '../support/platform.dart';
 import '../track/local/local.dart';
 import '../track/video_track_view_registration.dart';
 import '../types/other.dart';
@@ -163,6 +162,7 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
   @override
   void initState() {
     super.initState();
+    _trackMuted = widget.track.muted;
     _viewRegistration = widget.track.addViewRegistration(
       pixelDensity: widget.adaptiveStreamPixelDensity,
     );
@@ -191,7 +191,12 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
     // srcObject makes Safari reconfigure video compositing for all tiles.
     // CSS visibility hides only this element while preserving its layout,
     // decoder, and the other participants' video surfaces.
-    renderer.findHtmlView()?.style.visibility = visible ? 'visible' : 'hidden';
+    (renderer as dynamic).findHtmlView()?.style.visibility = visible ? 'visible' : 'hidden';
+  }
+
+  void _applyVideoElementVisibility() {
+    final renderer = _renderer;
+    if (renderer != null) _setVideoElementVisible(renderer, !_trackMuted);
   }
 
   Future<void> _attach(int generation, rtc.RTCVideoRenderer renderer) async {
@@ -203,6 +208,7 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
     }
 
     final track = widget.track;
+    _trackMuted = track.muted;
     renderer.srcObject = track.mediaStream;
     _setVideoElementVisible(renderer, !_trackMuted);
 
@@ -248,8 +254,7 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
 
     if (cachedChanged || trackChanged) {
       _generation++;
-      _rendererReadyForWeb = false;
-      if (trackChanged) _trackMuted = false;
+      if (cachedChanged) _rendererReadyForWeb = false;
     }
 
     if (cachedChanged) {
@@ -262,25 +267,14 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
 
     if (trackChanged) {
       oldWidget.track.removeViewRegistration(_viewRegistration);
-      _viewRegistration = widget.track.addViewRegistration(
-        pixelDensity: widget.adaptiveStreamPixelDensity,
-      );
+      widget.track.addExistingViewRegistration(_viewRegistration);
+      _trackMuted = widget.track.muted;
     } else if (widget.adaptiveStreamPixelDensity != oldWidget.adaptiveStreamPixelDensity) {
       _viewRegistration.pixelDensity = widget.adaptiveStreamPixelDensity;
     }
 
     if (cachedChanged || trackChanged) {
       _scheduleRenderer();
-    }
-
-    if (!cachedChanged &&
-        [BrowserType.safari, BrowserType.firefox].contains(lkBrowser()) &&
-        oldWidget.key != widget.key) {
-      final renderer = _renderer;
-      if (renderer != null) {
-        renderer.srcObject = widget.track.mediaStream;
-        _setVideoElementVisible(renderer, !_trackMuted);
-      }
     }
   }
 
@@ -292,6 +286,7 @@ class _WebVideoTrackRendererState extends State<_WebVideoTrackRenderer> {
             key: _viewRegistration.key,
             builder: (context) {
               WidgetsBindingCompatible.instance?.addPostFrameCallback((_) {
+                _applyVideoElementVisibility();
                 widget.track.onVideoViewBuild?.call();
               });
               return rtc.RTCVideoView(

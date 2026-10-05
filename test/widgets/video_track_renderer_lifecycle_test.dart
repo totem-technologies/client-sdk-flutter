@@ -174,6 +174,7 @@ void main() {
     await tester.runAsync(() async => await Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
     expect(renderer.initializationCount, 1);
+    expect(find.byType(rtc.RTCVideoView), findsOneWidget);
     expect(renderer.srcObject, same(c.stream));
     expect(a.created.single.disposeCount, 1);
     expect(b.created, isEmpty);
@@ -182,6 +183,11 @@ void main() {
     await tester.runAsync(() async => await Future<void>.delayed(Duration.zero));
     await tester.pumpAndSettle();
     expect(renderer.srcObject, same(c.stream));
+    c.updateMuted(true);
+    await tester.pump();
+    expect(find.byType(rtc.RTCVideoView), findsOneWidget);
+    expect(renderer.srcObject, same(c.stream));
+
     final updated = _Stream();
     c.updateStream(updated);
     await tester.runAsync(() async => await Future<void>.delayed(Duration.zero));

@@ -68,6 +68,13 @@ dev_dependencies:
   # Narrow pin so committed codegen stays deterministic across machines
   json_serializable: ">=6.14.1 <6.15.0"
 
+dependency_overrides:
+  # Use the renderer lifecycle fix until it is published to pub.dev.
+  flutter_webrtc:
+    git:
+      url: https://github.com/totem-technologies/flutter-webrtc.git
+      ref: fix/web-texture-renderer-and-video-view-lifecycle
+
 import_sorter:
   comments: false
   ignored_files:
