@@ -65,6 +65,11 @@ mixin VideoTrack on Track {
   void removeViewRegistration(VideoTrackViewRegistration registration) {
     viewRegistrations.remove(registration);
   }
+
+  @internal
+  void addExistingViewRegistration(VideoTrackViewRegistration registration) {
+    viewRegistrations.add(registration);
+  }
 }
 
 /// Used to group [LocalAudioTrack] and [RemoteAudioTrack].
